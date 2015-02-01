@@ -151,7 +151,7 @@ typedef struct
         int   sampleRate;    /* Hz */
         int   bitRate;             /* bps */
         int   channels;         /* ch */
-        int   duration;          /* always '16'*/
+        int   bits;          /* always '16'*/
 }OGG_DEC_PARAMETERS;
 
 typedef struct
@@ -160,9 +160,10 @@ typedef struct
         OGG_DEC_PARAMETERS              *sParm;
         OGG_DEC_PAGE_HEADER            *sPage;
         OGG_DEC_PACKET1_HEADER      *sPacket;
-        /* Decoder Info. */
+        /* Decoder Info.(internal) */
         vorbis_dsp_state            *mState;
         vorbis_info                      *mVi;
+        /* Decoder Info.(interface) */
         ogg_buffer                      *buf;
         ogg_reference                *ref;
         oggpack_buffer              *bits;

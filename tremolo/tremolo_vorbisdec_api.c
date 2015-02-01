@@ -256,6 +256,7 @@ int OGGDEC_FrameDecode(OGGDEC id, unsigned char *ogg_data, int *used_size, char 
 		int postion = ppage->Page_data_len;
 		ppage->Frame_number = ogg_decode_frame(mOGGHandle, ogg_data, postion, &usedbyte, decoded_pcm, decoded_len);
 		if ((*decoded_len)  == 0) {
+			mOGGHandle->filepos += usedbyte;
 			DEBUG_MSG("\nDecoded End (EOF) (total %5d frames & used byte(%5d))\n", mOGGHandle->frame_count, mOGGHandle->filepos);
 			return 3;
 		} else if ((*decoded_len)  > 0) {

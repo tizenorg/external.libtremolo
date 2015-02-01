@@ -50,12 +50,6 @@ int ogg_decode_create(OGG_DEC_HANDLE **handle)
 	pHandle->sPacket = (OGG_DEC_PACKET1_HEADER *)malloc(sizeof(OGG_DEC_PACKET1_HEADER));
 	memset(pHandle->sPacket,0, sizeof(OGG_DEC_PACKET1_HEADER));
 
-	pHandle->mState = (vorbis_dsp_state *)malloc(sizeof(vorbis_dsp_state));
-	memset(pHandle->mState,0, sizeof(vorbis_dsp_state));
-
-	pHandle->mVi = (vorbis_info *)malloc(sizeof(vorbis_info));
-	memset(pHandle->mVi,0, sizeof(vorbis_info));
-
 	pHandle->buf = (ogg_buffer *)malloc(sizeof(ogg_buffer));
 	memset(pHandle->buf,0, sizeof(ogg_buffer));
 
@@ -73,6 +67,9 @@ int ogg_decode_create(OGG_DEC_HANDLE **handle)
 
 	pHandle->framebuf = (unsigned char*)malloc(2048 * sizeof(unsigned char));
 	memset(pHandle->framebuf,0, 2048 * sizeof(unsigned char));
+
+	pHandle->mState = NULL;
+	pHandle->mVi = NULL;
 
 	*handle = pHandle;
 	return TRUE;
@@ -94,30 +91,6 @@ void ogg_decode_delete(OGG_DEC_HANDLE *handle)
 		if(handle->sParm) {
 			free(handle->sParm);
 			handle->sParm = NULL;
-		}
-
-		free(handle);
-		handle = NULL;
-		DEBUG_MSG("[SUCCESS] All ogg handle destroy\n");
-	}
-}
-
-int ogg_decode_reset(OGG_DEC_HANDLE *handle)
-{
-	int ret = TRUE;
-	/*****************************/
-	/* OGG Decoder Close       */
-	/*****************************/
-	if(handle) {
-		if (handle->mState != NULL) {
-			vorbis_dsp_destroy(handle->mState);
-			handle->mState = NULL;
-		}
-
-		if (handle->mVi != NULL) {
-			vorbis_info_clear_tremolo(handle->mVi);
-			free(handle->mVi);
-			handle->mVi = NULL;
 		}
 
 		if(handle->buf) {
@@ -149,6 +122,33 @@ int ogg_decode_reset(OGG_DEC_HANDLE *handle)
 			free(handle->framebuf);
 			handle->framebuf = NULL;
 		}
+		free(handle);
+		handle = NULL;
+	}
+}
+
+int ogg_decode_reset(OGG_DEC_HANDLE *handle)
+{
+	int ret = TRUE;
+
+	/* OGG Decoder (internal memory) Reset */
+	if(handle) {
+		if (handle->mState != NULL) {
+			vorbis_dsp_clear_tremolo(handle->mState);
+			free(handle->mState);
+			handle->mState = NULL;
+		} else {
+			DEBUG_MSG("[WARN] mState is NULL");
+		}
+
+		if (handle->mVi != NULL) {
+			vorbis_info_clear_tremolo(handle->mVi);
+			free(handle->mVi);
+			handle->mVi = NULL;
+		} else {
+			DEBUG_MSG("[WARN] mVi is NULL");
+		}
+
 	}else {
 		ret = FALSE;
 	}
@@ -160,8 +160,6 @@ void ogg_decode_memset(OGG_DEC_HANDLE *handle)
 	memset(handle->sParm, 0, sizeof(OGG_DEC_PARAMETERS));
 	memset(handle->sPage, 0, sizeof(OGG_DEC_PAGE_HEADER));
 	memset(handle->sPacket, 0, sizeof(OGG_DEC_PACKET1_HEADER));
-	memset(handle->mState, 0, sizeof(vorbis_dsp_state));
-	memset(handle->mVi, 0, sizeof(vorbis_info));
 	memset(handle->buf, 0, sizeof(ogg_buffer));
 	memset(handle->ref, 0, sizeof(ogg_reference));
 	memset(handle->bits, 0, sizeof(oggpack_buffer));
@@ -184,6 +182,13 @@ int ogg_decode_initial(OGG_DEC_HANDLE *handle, unsigned char *ogg_data, int *use
 	int ret = 0;
 	int offset = 0;
 	gint64 in_szie = handle->filesize;
+
+	/* OGG Decoder (internal memory) Initialization */
+	handle->mState = (vorbis_dsp_state *)malloc(sizeof(vorbis_dsp_state));
+	memset(handle->mState,0, sizeof(vorbis_dsp_state));
+
+	handle->mVi = (vorbis_info *)malloc(sizeof(vorbis_info));
+	memset(handle->mVi,0, sizeof(vorbis_info));
 
 	ret = ogg_parse_valid_sync (ogg_data, (unsigned int) in_szie, &offset);
 	if (ret) {
@@ -259,8 +264,8 @@ int ogg_decode_getinfo(OGG_DEC_HANDLE *handle, unsigned char *ogg_data, int *use
 		DEBUG_MSG ("[PARSE INFO] (MAX) BIT RATE....%6d bps\n", ppacket->bitrate_maximum);
 		DEBUG_MSG ("[PARSE INFO] (MIN) BIT RATE....%6d bps\n", ppacket->bitrate_minimum);
 		DEBUG_MSG ("[PARSE INFO] (NOR) BIT RATE....%6d bps\n", ppacket->bitrate_normal);
-		DEBUG_MSG ("[PARSE INFO] (AVG) BIT RATE....%6d bps\n", ppacket->bitrate_average);
 #ifndef _DONT_USED_
+		DEBUG_MSG ("[PARSE INFO] (AVG) BIT RATE....%6d bps\n", ppacket->bitrate_average);
 		DEBUG_MSG ("[PARSE INFO] SAMPLE SIZE1......%6d sample\n", ppacket->block_size0/(2*ppacket->audio_channel));
 		DEBUG_MSG ("[PARSE INFO] SAMPLE SIZE2......%6d sample\n", ppacket->block_size1/(2*ppacket->audio_channel));
 #endif
@@ -290,12 +295,18 @@ int ogg_decode_getinfo(OGG_DEC_HANDLE *handle, unsigned char *ogg_data, int *use
 	frame_size = 0;
 	ret = ogg_parse_check_page_header (ppage, ogg_data, noffset, &frame_size, 1, &page_type);
 	if (ret) {
+        int i = 0;
+        int skip_segment = 0;
 #ifdef _OGG_DEBUG_
 		DEBUG_MSG(">>>> Confirm packet type #3(skip) \n");
 #endif
 		/* ppage->Page_table[0] is "packet type #3"'s byte*/
-		data = ogg_data + OGG_PAGE_HEADER_SIZE + ppage->Page_segment + ppage->Page_table[0];
-		size = ppage->Page_data_len - ppage->Page_table[0];
+        do {
+            skip_segment += ppage->Page_table[i];
+            i++;
+        } while (ppage->Page_table[i-1] == 255);
+        data = ogg_data + OGG_PAGE_HEADER_SIZE + ppage->Page_segment + skip_segment;
+        size = ppage->Page_data_len - skip_segment;
 
 		if(page_type == 1) {
 #ifdef _OGG_DEBUG_
@@ -318,8 +329,22 @@ int ogg_decode_getinfo(OGG_DEC_HANDLE *handle, unsigned char *ogg_data, int *use
 			DEBUG_MSG ("[ERROR] vorbis_dsp_init_tremolo() return error (%d)\n", ret);
 			return FALSE;
 		}
-		*used_size += OGG_PAGE_HEADER_SIZE + ppage->Page_segment + ppage->Page_data_len;
-		ogg_data += OGG_PAGE_HEADER_SIZE + ppage->Page_segment + ppage->Page_data_len;
+		if (ppage->Granule_positon != 0) {
+			int tmp_size = ppage->Page_table[0];
+			ppage->Frame_number++;
+			while (ppage->Page_table[ppage->Frame_number] == 255) {
+				tmp_size += ppage->Page_table[ppage->Frame_number];
+				ppage->Frame_number++;
+			}
+			tmp_size += ppage->Page_table[ppage->Frame_number];
+			ppage->Frame_number++;
+			*used_size += OGG_PAGE_HEADER_SIZE + ppage->Page_segment + tmp_size;
+			ogg_data += OGG_PAGE_HEADER_SIZE + ppage->Page_segment + tmp_size;
+			handle->page_remainbyte = ppage->Page_data_len - tmp_size;
+		} else {
+			*used_size += OGG_PAGE_HEADER_SIZE + ppage->Page_segment + ppage->Page_data_len;
+			ogg_data += OGG_PAGE_HEADER_SIZE + ppage->Page_segment + ppage->Page_data_len;
+		}
 	}
 
 	return TRUE;
@@ -447,7 +472,10 @@ int ogg_decode_frame(OGG_DEC_HANDLE *handle, unsigned char *ogg_data, int postio
 					mState->out_end -= extra;
 					handle->sample_sum -= extra;
 				} else {
-					*used_size += ppage->Page_table[ppage->Frame_number];
+					while (ppage->Page_segment > ppage->Frame_number) {
+						*used_size += ppage->Page_table[ppage->Frame_number];
+						ppage->Frame_number++;
+					};
 					*decoded_len = 0;
 					return 0;
 				}
@@ -464,7 +492,12 @@ int ogg_decode_frame(OGG_DEC_HANDLE *handle, unsigned char *ogg_data, int postio
 			ppage->Frame_number++;
 		} else {
 			if (ppage->Need_nextpage) {
-				*used_size += ppage->Page_table[0];         //ppage->Frame_number is '0'
+				/* For skip used byte in previous continue frame */
+				while (ppage->Page_table[ppage->Frame_number] == 255) {
+					*used_size += ppage->Page_table[ppage->Frame_number];
+					ppage->Frame_number++;
+				}
+				*used_size += ppage->Page_table[ppage->Frame_number];
 				ppage->Frame_number++;
 				ppage->Need_nextpage = 0;
 			}
@@ -605,7 +638,7 @@ unsigned int ogg_parse_page_header (OGG_DEC_PAGE_HEADER *ppage, guint8 *buf)
 	/* The caller has ensured we have a valid header, so bitrate can't be zero here. */
 	ppage->Syncword = GST_READ_UINT32_BE (page_header);
 	if (ppage->Syncword != OGGSYNC) {
-		return -1;;        /* Sync not found */
+		return -1;        /* Sync not found */
 	}
 
 	ppage->Stream_version = page_header[4];        /* Always '0' */

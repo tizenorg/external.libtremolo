@@ -1,6 +1,6 @@
 Name:       libtremolo
 Summary:    Audio Library
-Version:    0.0.8
+Version:    0.0.11
 Release:    0
 Group:      System/Libraries
 License:    BSD
@@ -8,7 +8,7 @@ Source0:    %{name}-%{version}.tar.gz
 Requires(post):  /sbin/ldconfig
 Requires(postun):  /sbin/ldconfig
 
-%ifarch armv7l
+%ifarch armv7el armv7l
 BuildRequires: pkgconfig(glib-2.0)
 BuildRequires: pkgconfig(mm-common)
 BuildRequires: pkgconfig(mm-log)
