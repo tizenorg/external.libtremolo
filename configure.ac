@@ -11,6 +11,7 @@ AM_INIT_AUTOMAKE([-Wall -Werror foreign])
 AC_PROG_CC
 AC_PROG_LIBTOOL
 AM_PROG_AS
+AM_PROG_AR
 
 # Checks for header files.
 AC_HEADER_STDC

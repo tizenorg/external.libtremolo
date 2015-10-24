@@ -1,9 +1,9 @@
 Name:       libtremolo
 Summary:    Audio Library
-Version:    0.0.11
+Version:    0.0.12
 Release:    0
 Group:      System/Libraries
-License:    BSD-2.0
+License:    BSD-2.0 and Apache-2.0
 Source0:    %{name}-%{version}.tar.gz
 Requires(post):  /sbin/ldconfig
 Requires(postun):  /sbin/ldconfig
@@ -33,7 +33,7 @@ Requires:   %{name} = %{version}-%{release}
 ./autogen.sh
 
 CFLAGS="$CFLAGS -DEXPORT_API=\"__attribute__((visibility(\\\"default\\\")))\" -D_MM_PROJECT_FLOATER" \
-LDFLAGS+="-Wl,--rpath=%{_prefix}/lib -Wl,--hash-style=both -Wl,--as-needed" \
+LDFLAGS+="-Wl,--rpath=%{_prefix}/lib -Wl,--hash-style=both -Wl,--as-needed,-z,noexecstack" \
 ./configure --prefix=%{_prefix}
 make %{?jobs:-j%jobs}
 
@@ -43,8 +43,10 @@ sed -i -e "s#@TREMOLO_REQPKG@#$TREMOLO_REQPKG#g" tremolo/libtremolo.pc
 rm -rf %{buildroot}
 mkdir -p %{buildroot}/usr/share/license
 cp COPYING %{buildroot}/usr/share/license/%{name}
-cat LICENSE >> %{buildroot}/usr/share/license/%{name}
 %make_install
+mkdir -p %{buildroot}/usr/share/license
+cp LICENSE %{buildroot}/usr/share/license/%{name}
+
 %clean
 rm -rf %{buildroot}
 
